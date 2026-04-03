@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.env
+*.egg
+.eggs/
+idea.md
+plan.md
+plan_v2.md
+example-preview.jpg
+example.json
