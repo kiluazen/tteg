@@ -5,7 +5,7 @@ Free stock image search for AI coding agents. No API keys needed.
 ## Install
 
 ```bash
-pip install tteg
+uv tool install tteg
 ```
 
 ## Usage

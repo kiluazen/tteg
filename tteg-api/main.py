@@ -51,6 +51,18 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/auth/config")
+def auth_config() -> dict[str, object]:
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    publishable_key = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
+    auth_enabled = bool(supabase_url and publishable_key)
+    return {
+        "auth_enabled": auth_enabled,
+        "supabase_url": supabase_url,
+        "supabase_publishable_key": publishable_key,
+    }
+
+
 @app.get("/search")
 def search(
     q: str,
