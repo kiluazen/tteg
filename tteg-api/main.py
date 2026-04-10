@@ -3,13 +3,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 import requests
 
 from models import ImageResult
 from sources.unsplash import search_unsplash
+import billing
+import db
 
-app = FastAPI(title="tteg-api", version="0.2.0")
+app = FastAPI(title="tteg-api", version="0.3.0")
+
+LANDING_URL = "https://tteg.kushalsm.com"
 
 
 def _load_local_env() -> None:
@@ -41,9 +45,19 @@ def _serialize_result(result: ImageResult, index: int) -> dict[str, object]:
     }
 
 
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @app.on_event("startup")
 def startup() -> None:
     _load_local_env()
+
+
+# ── health / auth config ──────────────────────────────────────────────────────
 
 
 @app.get("/healthz")
@@ -63,14 +77,47 @@ def auth_config() -> dict[str, object]:
     }
 
 
+# ── search ────────────────────────────────────────────────────────────────────
+
+
 @app.get("/search")
 def search(
+    request: Request,
     q: str,
     n: int = Query(default=5, ge=1, le=10),
     orientation: str = Query(default="any", pattern="^(any|landscape|portrait|square)$"),
     width: int | None = Query(default=None, ge=1, le=10000),
     height: int | None = Query(default=None, ge=1, le=10000),
 ) -> dict[str, object]:
+    # ── resolve tier from API key header ─────────────────────────────────────
+    raw_key = (
+        request.headers.get("X-API-Key")
+        or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    )
+    tier = "free"
+
+    if raw_key.startswith("tteg_"):
+        plan = db.validate_api_key(raw_key)
+        if plan is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or inactive API key. Visit https://tteg.kushalsm.com to manage your subscription.",
+            )
+        tier = plan
+    else:
+        # Free tier: enforce daily query limit per IP
+        client_ip = _get_client_ip(request)
+        allowed, _count = db.check_and_increment_usage(client_ip)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Free tier limit ({db.FREE_DAILY_LIMIT} queries/day) reached. "
+                    f"Upgrade at {LANDING_URL}/#pricing"
+                ),
+            )
+
+    # ── Unsplash search ───────────────────────────────────────────────────────
     access_key = _resolve_access_key()
     if not access_key:
         raise HTTPException(status_code=500, detail="UNSPLASH_ACCESS_KEY is not configured")
@@ -97,15 +144,16 @@ def search(
         "query": q,
         "results": [_serialize_result(result, index) for index, result in enumerate(results, start=1)],
     }
+    if tier == "free":
+        payload["_tier"] = "free"
+        payload["_upgrade_url"] = f"{LANDING_URL}/#pricing"
 
-    # Unsplash API guidelines: trigger download tracking for returned results
     _track_downloads(results, access_key)
-
     return payload
 
 
 def _track_downloads(results: list[ImageResult], access_key: str) -> None:
-    """Ping Unsplash download_location URLs in the background for API compliance."""
+    """Ping Unsplash download_location URLs for API compliance."""
     for result in results:
         if not result.download_location:
             continue
@@ -116,4 +164,70 @@ def _track_downloads(results: list[ImageResult], access_key: str) -> None:
                 timeout=5,
             )
         except Exception:
-            pass  # best-effort, don't fail the request
+            pass
+
+
+# ── billing ───────────────────────────────────────────────────────────────────
+
+
+@app.post("/checkout")
+def create_checkout(plan: str = Query(pattern="^(pro|team)$")) -> dict[str, str]:
+    """Create a Stripe Checkout session and return the redirect URL."""
+    if not billing.is_configured():
+        raise HTTPException(status_code=503, detail="Billing not yet configured")
+    try:
+        checkout_url = billing.create_checkout_session(
+            plan=plan,
+            success_url=f"{LANDING_URL}/success.html?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{LANDING_URL}/#pricing",
+        )
+        return {"checkout_url": checkout_url}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/checkout/key")
+def get_key_for_session(session_id: str) -> dict[str, object]:
+    """
+    Called by the success page to retrieve the provisioned API key.
+    The webhook may arrive slightly after the redirect, so the client polls.
+    """
+    key = db.get_key_for_session(session_id)
+    if key is None:
+        raise HTTPException(status_code=404, detail="Key not ready yet, please retry in a moment")
+    return {"key": key}
+
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request) -> dict[str, str]:
+    """Handle Stripe webhook events."""
+    if not billing.is_configured():
+        raise HTTPException(status_code=503, detail="Billing not configured")
+
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    try:
+        event = billing.parse_webhook_event(payload, sig_header)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid webhook: {exc}") from exc
+
+    if event.type == "checkout.session.completed":
+        session = event.data.object
+        customer_details = session.customer_details or {}
+        email = customer_details.get("email") or "unknown"
+        plan = (session.metadata or {}).get("plan", "pro")
+        subscription_id = session.subscription
+        session_id = session.id
+
+        db.create_api_key(
+            email=email,
+            plan=plan,
+            subscription_id=subscription_id,
+            checkout_session_id=session_id,
+        )
+
+    elif event.type in ("customer.subscription.deleted", "customer.subscription.paused"):
+        db.deactivate_subscription(event.data.object.id)
+
+    return {"status": "ok"}
