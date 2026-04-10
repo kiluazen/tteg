@@ -60,8 +60,26 @@ Agents frequently need real images — hero banners, product shots, blog headers
 
 `tteg` abstracts all of that. One install, one command, clean JSON out.
 
+## MCP server
+
+Use tteg directly from Claude Code, Cursor, or any MCP-compatible host via [tteg-mcp](https://github.com/kiluazen/tteg-mcp).
+
+```json
+{
+  "mcpServers": {
+    "tteg": {
+      "command": "uvx",
+      "args": ["tteg-mcp"]
+    }
+  }
+}
+```
+
+Exposes a `search_images(query, count, orientation)` tool — no API key needed.
+
 ## Links
 
 - [tteg.kushalsm.com](https://tteg.kushalsm.com) — landing page
 - [PyPI](https://pypi.org/project/tteg/) — `pip install tteg`
+- [tteg-mcp](https://github.com/kiluazen/tteg-mcp) — MCP server
 - Free: 50 queries/day. No account needed.
