@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from tteg._version import __version__
 from tteg.cli import DEFAULT_API_URL, _resolve_api_url, main
+from tteg.client import TtegAPIError
 
 
 class CliTests(unittest.TestCase):
@@ -19,29 +20,23 @@ class CliTests(unittest.TestCase):
             self.assertEqual(_resolve_api_url(), DEFAULT_API_URL)
 
     def test_cli_sends_request_and_prints_json(self) -> None:
-        response = Mock()
-        response.ok = True
-        response.json.return_value = {"query": "cats", "results": []}
-
         runner = CliRunner()
-        with patch("tteg.cli.requests.get", return_value=response) as get_mock:
+        with patch("tteg.cli.search_images", return_value={"query": "cats", "results": []}) as search_mock:
             result = runner.invoke(main, ["cats", "--count", "3"])
 
         self.assertEqual(result.exit_code, 0)
         self.assertIn('"query": "cats"', result.output)
-        get_mock.assert_called_once()
-        _, kwargs = get_mock.call_args
-        self.assertEqual(kwargs["params"]["q"], "cats")
-        self.assertEqual(kwargs["params"]["n"], 3)
+        search_mock.assert_called_once_with(
+            "cats",
+            count=3,
+            orientation="any",
+            width=None,
+            height=None,
+        )
 
     def test_cli_surfaces_api_errors(self) -> None:
-        response = Mock()
-        response.ok = False
-        response.status_code = 429
-        response.json.return_value = {"detail": "rate limited"}
-
         runner = CliRunner()
-        with patch("tteg.cli.requests.get", return_value=response):
+        with patch("tteg.cli.search_images", side_effect=TtegAPIError(429, "rate limited")):
             result = runner.invoke(main, ["cats"])
 
         self.assertNotEqual(result.exit_code, 0)

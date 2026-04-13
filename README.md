@@ -1,6 +1,6 @@
 # tteg
 
-Free stock image search CLI for AI coding agents. No API keys, no setup.
+Free stock image search CLI and MCP server for AI coding agents. No API keys, no setup.
 
 ```bash
 uv tool install tteg && tteg "mountain sunset"
@@ -62,24 +62,25 @@ Agents frequently need real images — hero banners, product shots, blog headers
 
 ## MCP server
 
-Use tteg directly from Claude Code, Cursor, or any MCP-compatible host via [tteg-mcp](https://github.com/kiluazen/tteg-mcp).
+Use tteg directly from Claude Code, Cursor, or any MCP-compatible host from this repo:
 
 ```json
 {
   "mcpServers": {
     "tteg": {
       "command": "uvx",
-      "args": ["tteg-mcp"]
+      "args": ["--from", "git+https://github.com/kiluazen/tteg", "tteg-mcp"]
     }
   }
 }
 ```
 
-Exposes a `search_images(query, count, orientation)` tool — no API key needed.
+You can also install the package once and run `tteg-mcp` locally.
+
+Exposes a `search_images(query, count, orientation, width, height)` tool — no API key needed.
 
 ## Links
 
 - [tteg.kushalsm.com](https://tteg.kushalsm.com) — landing page
 - [PyPI](https://pypi.org/project/tteg/) — `pip install tteg`
-- [tteg-mcp](https://github.com/kiluazen/tteg-mcp) — MCP server
 - Free: 50 queries/day. No account needed.

@@ -17,17 +17,21 @@ from typing import Any
 from urllib import error, parse, request
 
 import click
-import requests
 
 from ._version import __version__
-
-DEFAULT_API_URL = "https://tteg-api-53227342417.asia-south1.run.app"
+from .client import (
+    DEFAULT_API_URL,
+    TtegAPIError,
+    TtegConnectionError,
+    resolve_api_url,
+    search_images,
+)
 CONFIG_DIR = Path.home() / ".config" / "tteg"
 CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
 
 
 def _resolve_api_url() -> str:
-    return os.environ.get("TTEG_API_URL", DEFAULT_API_URL).rstrip("/")
+    return resolve_api_url()
 
 
 # ------------------------------------------------------------------ CLI group
@@ -77,39 +81,31 @@ def search(
     height: int | None,
 ) -> None:
     """Send a search request to the tteg API and print the JSON response."""
-    api_url = _resolve_api_url()
-    params: dict[str, object] = {
-        "q": query,
-        "n": count,
-        "orientation": orientation,
-    }
-    if width is not None:
-        params["width"] = width
-    if height is not None:
-        params["height"] = height
-
     try:
-        response = requests.get(
-            f"{api_url}/search",
-            params=params,
-            timeout=30,
+        payload = search_images(
+            query,
+            count=count,
+            orientation=orientation,
+            width=width,
+            height=height,
         )
-    except requests.RequestException as exc:
-        click.echo(f"Error: failed to reach tteg API at {api_url}: {exc}", err=True)
+    except TtegConnectionError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1)
+    except TtegAPIError as exc:
+        click.echo(f"Error: {exc}", err=True)
         raise SystemExit(1)
 
-    if response.ok:
-        click.echo(json.dumps(response.json(), indent=2))
-        return
+    click.echo(json.dumps(payload, indent=2))
+    return
 
-    try:
-        error_payload = response.json()
-    except ValueError:
-        error_payload = {"detail": response.text.strip() or "unknown error"}
 
-    detail = error_payload.get("detail", error_payload)
-    click.echo(f"Error: tteg API returned {response.status_code}: {detail}", err=True)
-    raise SystemExit(1)
+@main.command("mcp")
+def run_mcp() -> None:
+    """Run the stdio MCP server."""
+    from .mcp_server import main as run_server
+
+    run_server()
 
 
 # --------------------------------------------------------------------- auth
