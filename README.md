@@ -64,6 +64,16 @@ tteg save "workspace desk" ./public/images/hero.jpg --orientation landscape
 
 `tteg save` searches, picks one result, downloads it locally, and prints JSON with the saved path.
 
+## Starter Kit Drop-In
+
+If you maintain a Claude Code, Codex, or Cursor starter kit, use the copy-paste blocks in [STARTER_KIT.md](STARTER_KIT.md).
+
+It includes:
+
+- a `CLAUDE.md` snippet for real-photo frontend work
+- an `AGENTS.md` snippet for Codex projects
+- an MCP config block for tool access inside agent hosts
+
 ## Why
 
 Agents frequently need real images — hero banners, product shots, blog headers. The normal path (register for Unsplash, get an API key, handle rate limits) is too much friction for a mid-task agent call.
