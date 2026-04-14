@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 import requests
 
 from models import ImageResult
@@ -12,6 +13,13 @@ import billing
 import db
 
 app = FastAPI(title="tteg-api", version="0.3.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 LANDING_URL = "https://tteg.kushalsm.com"
 
