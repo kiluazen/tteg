@@ -60,6 +60,27 @@ def startup() -> None:
 # ── health / auth config ──────────────────────────────────────────────────────
 
 
+@app.get("/")
+def root() -> dict[str, object]:
+    return {
+        "name": "tteg-api",
+        "version": "0.3.0",
+        "description": "Unsplash stock photos without registration or API keys",
+        "try_it": "GET /search?q=coffee+shop&n=3",
+        "parameters": {
+            "q": "search query (required)",
+            "n": "number of results, 1-10 (default: 5)",
+            "orientation": "landscape | portrait | square | any (default: any)",
+            "width": "max width in pixels",
+            "height": "max height in pixels",
+        },
+        "rate_limit": "50 queries/day per IP (free tier)",
+        "website": LANDING_URL,
+        "demo": f"{LANDING_URL}/try",
+        "source": "https://github.com/kiluazen/tteg",
+    }
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
