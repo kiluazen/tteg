@@ -35,6 +35,20 @@ def resolve_api_url() -> str:
     return os.environ.get("TTEG_API_URL", DEFAULT_API_URL).rstrip("/")
 
 
+def _load_auth_token() -> str | None:
+    """Read the saved access token from ~/.config/tteg/credentials.json."""
+    import json
+
+    creds_path = Path.home() / ".config" / "tteg" / "credentials.json"
+    if not creds_path.exists():
+        return None
+    try:
+        data = json.loads(creds_path.read_text(encoding="utf-8"))
+        return data.get("access_token")
+    except Exception:
+        return None
+
+
 def search_images(
     query: str,
     *,
@@ -61,10 +75,16 @@ def search_images(
     if height is not None:
         params["height"] = height
 
+    headers: dict[str, str] = {}
+    token = _load_auth_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
         response = requests.get(
             f"{base_url}/search",
             params=params,
+            headers=headers,
             timeout=timeout,
         )
     except requests.RequestException as exc:

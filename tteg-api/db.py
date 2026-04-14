@@ -1,8 +1,7 @@
-"""Database operations for tteg-api billing and rate limiting."""
+"""Database operations for tteg-api — user auth and rate limiting."""
 from __future__ import annotations
 
 import os
-import secrets
 from datetime import date
 
 import psycopg2
@@ -21,19 +20,76 @@ def _get_conn():
     return psycopg2.connect(url, connect_timeout=3)
 
 
-def validate_api_key(key: str) -> str | None:
-    """Return plan name if key is valid and active, else None."""
+def verify_supabase_token(token: str) -> dict | None:
+    """
+    Verify a Supabase JWT by querying auth.users.
+    Returns {"id": uuid, "email": str} if valid, None otherwise.
+    """
     try:
         conn = _get_conn()
         with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Supabase stores sessions — verify the token maps to a live user
+            # We use the Supabase auth schema directly
             cur.execute(
-                "SELECT plan FROM api_keys WHERE key = %s AND active = TRUE",
-                (key,),
+                """
+                SELECT au.id, au.email
+                FROM auth.sessions s
+                JOIN auth.users au ON au.id = s.user_id
+                WHERE s.not_after > NOW()
+                LIMIT 1
+                """
             )
-            row = cur.fetchone()
-            return row["plan"] if row else None
+            # Fallback: just check if any user exists with recent activity
+            # For proper JWT validation, use Supabase's GoTrue or a JWT lib
+            # For now, validate by checking the token against Supabase REST API
+            pass
     except Exception:
+        pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    # Use Supabase REST API to validate the token — more reliable
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    supabase_key = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
+    if not supabase_url or not supabase_key:
         return None
+
+    try:
+        import requests
+        resp = requests.get(
+            f"{supabase_url}/auth/v1/user",
+            headers={
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {token}",
+            },
+            timeout=5,
+        )
+        if resp.ok:
+            data = resp.json()
+            return {"id": data.get("id"), "email": data.get("email")}
+    except Exception:
+        pass
+
+    return None
+
+
+def track_user_request(user_id: str, query: str) -> None:
+    """Log a request from an authenticated user."""
+    try:
+        conn = _get_conn()
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO user_requests (user_id, query, date)
+                VALUES (%s, %s, %s)
+                """,
+                (user_id, query, date.today().isoformat()),
+            )
+    except Exception:
+        pass  # fail open — don't block search if tracking fails
     finally:
         try:
             conn.close()
@@ -65,68 +121,6 @@ def check_and_increment_usage(ip: str) -> tuple[bool, int]:
             return count <= FREE_DAILY_LIMIT, count
     except Exception:
         return True, 0  # fail open
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-
-def create_api_key(
-    email: str,
-    plan: str,
-    subscription_id: str,
-    checkout_session_id: str | None = None,
-) -> str:
-    """Generate and persist a new API key. Returns the raw key."""
-    key = f"tteg_{secrets.token_urlsafe(32)}"
-    conn = _get_conn()
-    try:
-        with conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO api_keys
-                    (key, email, plan, stripe_subscription_id, stripe_checkout_session_id, active)
-                VALUES (%s, %s, %s, %s, %s, TRUE)
-                """,
-                (key, email, plan, subscription_id, checkout_session_id),
-            )
-        return key
-    finally:
-        conn.close()
-
-
-def get_key_for_session(stripe_session_id: str) -> str | None:
-    """Look up an API key by the Stripe checkout session ID."""
-    try:
-        conn = _get_conn()
-        with conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT key FROM api_keys WHERE stripe_checkout_session_id = %s AND active = TRUE",
-                (stripe_session_id,),
-            )
-            row = cur.fetchone()
-            return row["key"] if row else None
-    except Exception:
-        return None
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-
-def deactivate_subscription(subscription_id: str) -> None:
-    """Mark all keys for a subscription as inactive."""
-    try:
-        conn = _get_conn()
-        with conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE api_keys SET active = FALSE WHERE stripe_subscription_id = %s",
-                (subscription_id,),
-            )
-    except Exception:
-        pass
     finally:
         try:
             conn.close()
