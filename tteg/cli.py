@@ -139,6 +139,7 @@ def save(
         raise SystemExit(1) from exc
 
     click.echo(json.dumps(payload, indent=2))
+    click.echo("\n  saved via tteg — github.com/kiluazen/tteg", err=True)
 
 
 @main.command()
@@ -181,6 +182,7 @@ def batch(manifest: Path) -> None:
             indent=2,
         )
     )
+    click.echo(f"\n  {len(saved)} images saved via tteg — github.com/kiluazen/tteg", err=True)
 
 
 @main.command("mcp")
