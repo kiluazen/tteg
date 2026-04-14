@@ -30,6 +30,14 @@ Save a local file into the repo:
 Use landscape images for hero sections unless the design needs another ratio.
 ```
 
+## Whole page in one pass
+
+```bash
+tteg batch landing-page-images.json
+```
+
+Use this when the project needs a hero image, team shot, founder photo, and testimonial portrait together.
+
 ## MCP config
 
 ```json

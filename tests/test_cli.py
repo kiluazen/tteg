@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
@@ -36,37 +38,65 @@ class CliTests(unittest.TestCase):
 
     def test_save_downloads_selected_result(self) -> None:
         runner = CliRunner()
-        payload = {
-            "query": "cats",
-            "results": [
-                {
-                    "id": 1,
-                    "title": "Orange cat on sofa",
-                    "image_url": "https://images.example.com/cat.jpg",
-                }
-            ],
-        }
-        with patch("tteg.cli.search_images", return_value=payload) as search_mock:
-            with patch(
-                "tteg.cli.download_image",
-                return_value={
-                    "output_path": "/tmp/hero.jpg",
-                    "content_type": "image/jpeg",
-                    "size_bytes": 1234,
-                },
-            ) as download_mock:
-                result = runner.invoke(main, ["save", "cats", "hero.jpg"])
+        with patch(
+            "tteg.cli.search_and_save_image",
+            return_value={
+                "query": "cats",
+                "saved_to": "/tmp/hero.jpg",
+                "content_type": "image/jpeg",
+                "size_bytes": 1234,
+                "result": {"id": 1, "title": "Orange cat on sofa"},
+            },
+        ) as save_mock:
+            result = runner.invoke(main, ["save", "cats", "hero.jpg"])
 
         self.assertEqual(result.exit_code, 0)
         self.assertIn('"saved_to": "/tmp/hero.jpg"', result.output)
-        search_mock.assert_called_once_with(
+        save_mock.assert_called_once_with(
             "cats",
-            count=1,
+            Path("hero.jpg"),
+            index=1,
             orientation="any",
             width=None,
             height=None,
         )
-        download_mock.assert_called_once_with("https://images.example.com/cat.jpg", unittest.mock.ANY)
+
+    def test_batch_saves_many_images_from_manifest(self) -> None:
+        runner = CliRunner()
+        manifest = {
+            "images": [
+                {
+                    "query": "saas dashboard hero",
+                    "output": "./public/images/hero",
+                    "orientation": "landscape",
+                },
+                {
+                    "query": "team collaboration office",
+                    "output": "./public/images/team",
+                    "index": 2,
+                },
+            ]
+        }
+
+        with runner.isolated_filesystem():
+            manifest_path = Path("landing-images.json")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with patch(
+                "tteg.cli.search_and_save_image",
+                side_effect=[
+                    {"query": "saas dashboard hero", "saved_to": "public/images/hero.jpg"},
+                    {"query": "team collaboration office", "saved_to": "public/images/team.jpg"},
+                ],
+            ) as save_mock:
+                result = runner.invoke(main, ["batch", str(manifest_path)])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn('"saved_to": "public/images/hero.jpg"', result.output)
+        self.assertEqual(save_mock.call_count, 2)
+        self.assertEqual(save_mock.call_args_list[0].args[0], "saas dashboard hero")
+        self.assertEqual(save_mock.call_args_list[0].args[1], Path("./public/images/hero"))
+        self.assertEqual(save_mock.call_args_list[1].kwargs["index"], 2)
 
     def test_cli_surfaces_api_errors(self) -> None:
         runner = CliRunner()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -115,6 +116,73 @@ def download_image(
         "content_type": content_type or None,
         "size_bytes": len(response.content),
     }
+
+
+def search_and_save_image(
+    query: str,
+    output_path: str | Path,
+    *,
+    index: int = 1,
+    orientation: str = "any",
+    width: int | None = None,
+    height: int | None = None,
+    timeout: float = 30,
+) -> dict[str, Any]:
+    payload = search_images(
+        query,
+        count=index,
+        orientation=orientation,
+        width=width,
+        height=height,
+        timeout=timeout,
+    )
+    selected = select_search_result(payload, index)
+
+    image_url = selected.get("image_url")
+    if not isinstance(image_url, str) or not image_url.strip():
+        raise ValueError("selected result did not include an image_url")
+
+    target = _resolve_output_path(Path(output_path), selected, index)
+    saved = download_image(image_url, target, timeout=timeout)
+    return {
+        "query": query,
+        "saved_to": saved["output_path"],
+        "content_type": saved["content_type"],
+        "size_bytes": saved["size_bytes"],
+        "result": selected,
+    }
+
+
+def select_search_result(payload: dict[str, Any], index: int) -> dict[str, Any]:
+    results = payload.get("results")
+    if not isinstance(results, list) or len(results) < index:
+        raise ValueError(f"expected at least {index} results for query '{payload.get('query', '')}'")
+
+    selected = results[index - 1]
+    if not isinstance(selected, dict):
+        raise ValueError("server returned an invalid result shape")
+
+    return selected
+
+
+def _resolve_output_path(output: Path, selected: dict[str, Any], index: int) -> Path:
+    if output.exists() and output.is_dir():
+        return output / _default_filename(selected, index)
+    return output
+
+
+def _default_filename(selected: dict[str, Any], index: int) -> str:
+    title = selected.get("title")
+    if isinstance(title, str) and title.strip():
+        stem = _slugify(title)
+    else:
+        stem = f"tteg-image-{index}"
+    return stem or f"tteg-image-{index}"
+
+
+def _slugify(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
+    return cleaned[:80] or "tteg-image"
 
 
 def _finalize_output_path(path: Path, url: str, content_type: str) -> Path:

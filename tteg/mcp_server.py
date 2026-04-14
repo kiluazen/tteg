@@ -8,6 +8,7 @@ from .client import (
     TtegAPIError,
     TtegConnectionError,
     download_image,
+    search_and_save_image as run_search_and_save_image,
     search_images as run_search_images,
 )
 
@@ -58,34 +59,49 @@ def search_and_save_image(
 ) -> dict[str, Any]:
     """Search tteg and save one result locally."""
     try:
-        payload = run_search_images(
+        return run_search_and_save_image(
             query,
-            count=index,
+            output_path,
+            index=index,
             orientation=orientation,
             width=width,
             height=height,
         )
-        results = payload.get("results")
-        if not isinstance(results, list) or len(results) < index:
-            raise ValueError(f"expected at least {index} results for query '{query}'")
-
-        selected = results[index - 1]
-        if not isinstance(selected, dict):
-            raise ValueError("server returned an invalid result shape")
-
-        image_url = selected.get("image_url")
-        if not isinstance(image_url, str) or not image_url.strip():
-            raise ValueError("selected result did not include an image_url")
-
-        saved = download_image(image_url, output_path)
-        return {
-            "query": query,
-            "saved_to": saved["output_path"],
-            "content_type": saved["content_type"],
-            "size_bytes": saved["size_bytes"],
-            "result": selected,
-        }
     except (TtegConnectionError, TtegAPIError, ValueError) as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+@mcp.tool()
+def batch_save_images(
+    images: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Search tteg and save many results locally from one JSON array."""
+    try:
+        saved: list[dict[str, Any]] = []
+        for index, item in enumerate(images, start=1):
+            if not isinstance(item, dict):
+                raise ValueError(f"item {index} must be an object")
+
+            query = item.get("query")
+            output_path = item.get("output_path")
+            if not isinstance(query, str) or not query.strip():
+                raise ValueError(f"item {index} is missing a valid query")
+            if not isinstance(output_path, str) or not output_path.strip():
+                raise ValueError(f"item {index} is missing a valid output_path")
+
+            saved.append(
+                run_search_and_save_image(
+                    query.strip(),
+                    output_path.strip(),
+                    index=int(item.get("index", 1)),
+                    orientation=item.get("orientation", "any"),
+                    width=item.get("width"),
+                    height=item.get("height"),
+                )
+            )
+
+        return {"saved": saved}
+    except (TtegConnectionError, TtegAPIError, ValueError, TypeError) as exc:
         raise RuntimeError(str(exc)) from exc
 
 

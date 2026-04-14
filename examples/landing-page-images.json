@@ -1,0 +1,19 @@
+{
+  "images": [
+    {
+      "query": "saas dashboard hero",
+      "output": "./public/images/hero",
+      "orientation": "landscape"
+    },
+    {
+      "query": "startup team meeting in office",
+      "output": "./public/images/team",
+      "orientation": "landscape"
+    },
+    {
+      "query": "founder portrait at laptop",
+      "output": "./public/images/founder",
+      "orientation": "portrait"
+    }
+  ]
+}

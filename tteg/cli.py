@@ -24,8 +24,8 @@ from .client import (
     DEFAULT_API_URL,
     TtegAPIError,
     TtegConnectionError,
-    download_image,
     resolve_api_url,
+    search_and_save_image,
     search_images,
 )
 CONFIG_DIR = Path.home() / ".config" / "tteg"
@@ -124,28 +124,45 @@ def save(
 ) -> None:
     """Search and save one image locally."""
     try:
-        payload = search_images(
-            query,
-            count=index,
-            orientation=orientation,
-            width=width,
-            height=height,
-        )
-        results = payload.get("results")
-        if not isinstance(results, list) or len(results) < index:
-            raise click.ClickException(f"expected at least {index} results for query '{query}'")
-
-        selected = results[index - 1]
-        if not isinstance(selected, dict):
-            raise click.ClickException("server returned an invalid result shape")
-
-        image_url = selected.get("image_url")
-        if not isinstance(image_url, str) or not image_url.strip():
-            raise click.ClickException("selected result did not include an image_url")
-
-        target = _resolve_output_path(output, selected, index)
-        saved = download_image(image_url, target)
+        payload = search_and_save_image(query, output, index=index, orientation=orientation, width=width, height=height)
     except click.ClickException as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    except TtegConnectionError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    except TtegAPIError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+    click.echo(json.dumps(payload, indent=2))
+
+
+@main.command()
+@click.argument("manifest", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def batch(manifest: Path) -> None:
+    """Save many images from a JSON manifest."""
+    try:
+        items = _load_batch_manifest(manifest)
+        saved: list[dict[str, Any]] = []
+        for item in items:
+            saved.append(
+                search_and_save_image(
+                    item["query"],
+                    item["output"],
+                    index=item["index"],
+                    orientation=item["orientation"],
+                    width=item["width"],
+                    height=item["height"],
+                )
+            )
+    except click.ClickException as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    except ValueError as exc:
         click.echo(f"Error: {exc}", err=True)
         raise SystemExit(1) from exc
     except TtegConnectionError as exc:
@@ -158,11 +175,8 @@ def save(
     click.echo(
         json.dumps(
             {
-                "query": query,
-                "saved_to": saved["output_path"],
-                "content_type": saved["content_type"],
-                "size_bytes": saved["size_bytes"],
-                "result": selected,
+                "manifest": str(manifest),
+                "saved": saved,
             },
             indent=2,
         )
@@ -416,24 +430,60 @@ def _cred_number(creds: dict[str, Any] | None, key: str) -> float | None:
 # ----------------------------------------------------------- misc helpers
 
 
-def _resolve_output_path(output: Path, selected: dict[str, Any], index: int) -> Path:
-    if output.exists() and output.is_dir():
-        return output / _default_filename(selected, index)
-    return output
+def _load_batch_manifest(path: Path) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise click.ClickException(f"failed to read manifest: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise click.ClickException(f"manifest is not valid JSON: {exc}") from exc
 
+    if isinstance(payload, dict):
+        payload = payload.get("images")
 
-def _default_filename(selected: dict[str, Any], index: int) -> str:
-    title = selected.get("title")
-    if isinstance(title, str) and title.strip():
-        stem = _slugify(title)
-    else:
-        stem = f"tteg-image-{index}"
-    return stem or f"tteg-image-{index}"
+    if not isinstance(payload, list) or not payload:
+        raise click.ClickException("manifest must be a non-empty JSON array or an object with an images array")
 
+    items: list[dict[str, Any]] = []
+    for index, raw_item in enumerate(payload, start=1):
+        if not isinstance(raw_item, dict):
+            raise click.ClickException(f"manifest item {index} must be an object")
 
-def _slugify(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
-    return cleaned[:80] or "tteg-image"
+        query = raw_item.get("query")
+        output = raw_item.get("output")
+        if not isinstance(query, str) or not query.strip():
+            raise click.ClickException(f"manifest item {index} is missing a valid query")
+        if not isinstance(output, str) or not output.strip():
+            raise click.ClickException(f"manifest item {index} is missing a valid output path")
+
+        item_index = raw_item.get("index", 1)
+        if not isinstance(item_index, int) or not 1 <= item_index <= 10:
+            raise click.ClickException(f"manifest item {index} index must be an integer between 1 and 10")
+
+        orientation = raw_item.get("orientation", "any")
+        if orientation not in {"any", "landscape", "portrait", "square"}:
+            raise click.ClickException(
+                f"manifest item {index} orientation must be one of: any, landscape, portrait, square"
+            )
+
+        width = raw_item.get("width")
+        height = raw_item.get("height")
+        for label, value in [("width", width), ("height", height)]:
+            if value is not None and (not isinstance(value, int) or value < 1):
+                raise click.ClickException(f"manifest item {index} {label} must be a positive integer")
+
+        items.append(
+            {
+                "query": query.strip(),
+                "output": Path(output),
+                "index": item_index,
+                "orientation": orientation,
+                "width": width,
+                "height": height,
+            }
+        )
+
+    return items
 
 
 def _find_free_port() -> int:

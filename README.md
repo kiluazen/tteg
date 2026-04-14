@@ -22,6 +22,7 @@ tteg "mountain sunset"
 tteg "hero banner" -n 8 --orientation landscape
 tteg "office workspace" --width 1920 --height 1080
 tteg save "saas team working" ./public/hero
+tteg batch examples/landing-page-images.json
 ```
 
 ## Output
@@ -64,6 +65,33 @@ tteg save "workspace desk" ./public/images/hero.jpg --orientation landscape
 
 `tteg save` searches, picks one result, downloads it locally, and prints JSON with the saved path.
 
+## Batch A Page
+
+```bash
+tteg batch examples/landing-page-images.json
+```
+
+Manifest format:
+
+```json
+{
+  "images": [
+    {
+      "query": "saas dashboard hero",
+      "output": "./public/images/hero",
+      "orientation": "landscape"
+    },
+    {
+      "query": "startup team meeting in office",
+      "output": "./public/images/team",
+      "orientation": "landscape"
+    }
+  ]
+}
+```
+
+Use this when the page needs a hero, team shot, founder photo, testimonial portrait, or menu shot in one pass.
+
 ## Starter Kit Drop-In
 
 If you maintain a Claude Code, Codex, or Cursor starter kit, use the copy-paste blocks in [STARTER_KIT.md](STARTER_KIT.md).
@@ -102,6 +130,7 @@ Exposes:
 - `search_images(query, count, orientation, width, height)`
 - `save_image(url, output_path)`
 - `search_and_save_image(query, output_path, index, orientation, width, height)`
+- `batch_save_images(images)`
 
 No API key needed.
 
