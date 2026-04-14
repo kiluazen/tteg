@@ -21,6 +21,7 @@ uv tool install tteg
 tteg "mountain sunset"
 tteg "hero banner" -n 8 --orientation landscape
 tteg "office workspace" --width 1920 --height 1080
+tteg save "saas team working" ./public/hero
 ```
 
 ## Output
@@ -54,6 +55,15 @@ tteg "office workspace" --width 1920 --height 1080
 | `--width` | — | Target width in pixels |
 | `--height` | — | Target height in pixels |
 
+## Save Locally
+
+```bash
+tteg save "saas team working" ./public/hero
+tteg save "workspace desk" ./public/images/hero.jpg --orientation landscape
+```
+
+`tteg save` searches, picks one result, downloads it locally, and prints JSON with the saved path.
+
 ## Why
 
 Agents frequently need real images — hero banners, product shots, blog headers. The normal path (register for Unsplash, get an API key, handle rate limits) is too much friction for a mid-task agent call.
@@ -77,7 +87,13 @@ Use tteg directly from Claude Code, Cursor, or any MCP-compatible host from this
 
 You can also install the package once and run `tteg-mcp` locally.
 
-Exposes a `search_images(query, count, orientation, width, height)` tool — no API key needed.
+Exposes:
+
+- `search_images(query, count, orientation, width, height)`
+- `save_image(url, output_path)`
+- `search_and_save_image(query, output_path, index, orientation, width, height)`
+
+No API key needed.
 
 ## Links
 

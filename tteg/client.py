@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import mimetypes
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 
@@ -83,3 +86,57 @@ def search_images(
         detail = error_payload.get("detail", error_payload) if isinstance(error_payload, dict) else error_payload
 
     raise TtegAPIError(response.status_code, str(detail))
+
+
+def download_image(
+    url: str,
+    output_path: str | Path,
+    *,
+    timeout: float = 30,
+) -> dict[str, Any]:
+    destination = Path(output_path).expanduser()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        response = requests.get(url, timeout=timeout)
+    except requests.RequestException as exc:
+        raise TtegConnectionError(f"failed to download image from {url}: {exc}") from exc
+
+    if not response.ok:
+        detail = response.text.strip() or "download failed"
+        raise TtegAPIError(response.status_code, detail)
+
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    final_path = _finalize_output_path(destination, url, content_type)
+    final_path.write_bytes(response.content)
+
+    return {
+        "output_path": str(final_path),
+        "content_type": content_type or None,
+        "size_bytes": len(response.content),
+    }
+
+
+def _finalize_output_path(path: Path, url: str, content_type: str) -> Path:
+    if path.suffix:
+        return path
+
+    inferred = _infer_extension(url, content_type)
+    if inferred:
+        return path.with_suffix(inferred)
+    return path
+
+
+def _infer_extension(url: str, content_type: str) -> str:
+    if content_type:
+        guessed = mimetypes.guess_extension(content_type)
+        if guessed == ".jpe":
+            return ".jpg"
+        if guessed:
+            return guessed
+
+    suffix = Path(urlparse(url).path).suffix.lower()
+    if suffix:
+        return ".jpg" if suffix == ".jpeg" else suffix
+
+    return ""

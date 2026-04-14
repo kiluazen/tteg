@@ -34,6 +34,40 @@ class CliTests(unittest.TestCase):
             height=None,
         )
 
+    def test_save_downloads_selected_result(self) -> None:
+        runner = CliRunner()
+        payload = {
+            "query": "cats",
+            "results": [
+                {
+                    "id": 1,
+                    "title": "Orange cat on sofa",
+                    "image_url": "https://images.example.com/cat.jpg",
+                }
+            ],
+        }
+        with patch("tteg.cli.search_images", return_value=payload) as search_mock:
+            with patch(
+                "tteg.cli.download_image",
+                return_value={
+                    "output_path": "/tmp/hero.jpg",
+                    "content_type": "image/jpeg",
+                    "size_bytes": 1234,
+                },
+            ) as download_mock:
+                result = runner.invoke(main, ["save", "cats", "hero.jpg"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn('"saved_to": "/tmp/hero.jpg"', result.output)
+        search_mock.assert_called_once_with(
+            "cats",
+            count=1,
+            orientation="any",
+            width=None,
+            height=None,
+        )
+        download_mock.assert_called_once_with("https://images.example.com/cat.jpg", unittest.mock.ANY)
+
     def test_cli_surfaces_api_errors(self) -> None:
         runner = CliRunner()
         with patch("tteg.cli.search_images", side_effect=TtegAPIError(429, "rate limited")):

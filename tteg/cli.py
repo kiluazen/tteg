@@ -5,6 +5,7 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import secrets
 import socket
 import stat
@@ -23,6 +24,7 @@ from .client import (
     DEFAULT_API_URL,
     TtegAPIError,
     TtegConnectionError,
+    download_image,
     resolve_api_url,
     search_images,
 )
@@ -98,6 +100,73 @@ def search(
 
     click.echo(json.dumps(payload, indent=2))
     return
+
+
+@main.command()
+@click.argument("query")
+@click.argument("output", type=click.Path(path_type=Path))
+@click.option("--index", default=1, show_default=True, type=click.IntRange(1, 10))
+@click.option(
+    "--orientation",
+    type=click.Choice(["any", "landscape", "portrait", "square"], case_sensitive=False),
+    default="any",
+    show_default=True,
+)
+@click.option("--width", type=click.IntRange(1, 10000), default=None)
+@click.option("--height", type=click.IntRange(1, 10000), default=None)
+def save(
+    query: str,
+    output: Path,
+    index: int,
+    orientation: str,
+    width: int | None,
+    height: int | None,
+) -> None:
+    """Search and save one image locally."""
+    try:
+        payload = search_images(
+            query,
+            count=index,
+            orientation=orientation,
+            width=width,
+            height=height,
+        )
+        results = payload.get("results")
+        if not isinstance(results, list) or len(results) < index:
+            raise click.ClickException(f"expected at least {index} results for query '{query}'")
+
+        selected = results[index - 1]
+        if not isinstance(selected, dict):
+            raise click.ClickException("server returned an invalid result shape")
+
+        image_url = selected.get("image_url")
+        if not isinstance(image_url, str) or not image_url.strip():
+            raise click.ClickException("selected result did not include an image_url")
+
+        target = _resolve_output_path(output, selected, index)
+        saved = download_image(image_url, target)
+    except click.ClickException as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    except TtegConnectionError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    except TtegAPIError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+    click.echo(
+        json.dumps(
+            {
+                "query": query,
+                "saved_to": saved["output_path"],
+                "content_type": saved["content_type"],
+                "size_bytes": saved["size_bytes"],
+                "result": selected,
+            },
+            indent=2,
+        )
+    )
 
 
 @main.command("mcp")
@@ -345,6 +414,26 @@ def _cred_number(creds: dict[str, Any] | None, key: str) -> float | None:
 
 
 # ----------------------------------------------------------- misc helpers
+
+
+def _resolve_output_path(output: Path, selected: dict[str, Any], index: int) -> Path:
+    if output.exists() and output.is_dir():
+        return output / _default_filename(selected, index)
+    return output
+
+
+def _default_filename(selected: dict[str, Any], index: int) -> str:
+    title = selected.get("title")
+    if isinstance(title, str) and title.strip():
+        stem = _slugify(title)
+    else:
+        stem = f"tteg-image-{index}"
+    return stem or f"tteg-image-{index}"
+
+
+def _slugify(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower()).strip("-")
+    return cleaned[:80] or "tteg-image"
 
 
 def _find_free_port() -> int:
