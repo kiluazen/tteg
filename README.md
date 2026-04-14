@@ -1,12 +1,20 @@
 # tteg
 
-Free stock image search CLI and MCP server for AI coding agents. No API keys, no setup.
+Unsplash stock photos without registration or API keys.
 
 ```bash
-uv tool install tteg && tteg "mountain sunset"
+uv tool install tteg
+tteg save "startup office" ./public/hero --orientation landscape
+# → saves a real photo to ./public/hero.jpg
 ```
 
-Returns image URLs from Unsplash — ready to drop into any LLM workflow.
+No Unsplash app. No API key. No `.env` files. Just photos.
+
+## Why this exists
+
+Unsplash has 4M+ free photos. To use them programmatically you need to register a developer account, create an application, and manage API keys. Their official JavaScript library was [archived in 2024](https://github.com/unsplash/unsplash-js).
+
+tteg handles all of that server-side. You get a CLI, an HTTP API, an MCP server, and an embeddable widget — all with zero setup.
 
 ## Install
 
@@ -15,36 +23,65 @@ uv tool install tteg
 # or: pip install tteg
 ```
 
-## Usage
+## Use
 
+**Search** — get image URLs:
 ```bash
-tteg "mountain sunset"
-tteg "hero banner" -n 8 --orientation landscape
-tteg "office workspace" --width 1920 --height 1080
-tteg save "saas team working" ./public/hero
-tteg batch examples/landing-page-images.json
+tteg "coffee shop" -n 3 --orientation landscape
 ```
 
-## Output
+**Save** — download one photo into your project:
+```bash
+tteg save "modern office" ./public/hero --orientation landscape
+```
+
+**Batch** — fill an entire landing page from a JSON manifest:
+```bash
+tteg batch landing-page-images.json
+```
+
+```json
+[
+  {"query": "startup office", "output": "./public/hero", "orientation": "landscape"},
+  {"query": "developer portrait", "output": "./public/founder"},
+  {"query": "team meeting", "output": "./public/team", "orientation": "landscape"}
+]
+```
+
+## HTTP API (no install needed)
+
+```bash
+curl "https://tteg-api-53227342417.asia-south1.run.app/search?q=coffee+shop&n=3"
+```
+
+No headers. No auth. CORS enabled. [Try it live →](https://tteg.kushalsm.com/try)
+
+**Parameters:** `q` (query), `n` (count, 1-10), `orientation` (landscape/portrait/square/any), `width`, `height`
+
+## MCP server
+
+For Claude Code, Cursor, or any MCP host:
 
 ```json
 {
-  "query": "mountain sunset",
-  "results": [
-    {
-      "id": 1,
-      "title": "A colorful sunrise over Jamnik village",
-      "image_url": "https://images.unsplash.com/photo-...",
-      "thumb_url": "https://images.unsplash.com/photo-...&w=200"
-    },
-    {
-      "id": 2,
-      "title": "Brown mountains under orange sky",
-      "image_url": "https://images.unsplash.com/photo-...",
-      "thumb_url": "https://images.unsplash.com/photo-...&w=200"
+  "mcpServers": {
+    "tteg": {
+      "command": "uvx",
+      "args": ["tteg-mcp"]
     }
-  ]
+  }
 }
+```
+
+Tools: `search_images`, `save_image`, `search_and_save_image`, `batch_save_images`
+
+## Embed widget
+
+Drop into any HTML page:
+
+```html
+<div data-tteg="coffee shop" data-count="3"></div>
+<script src="https://tteg.kushalsm.com/embed.js"></script>
 ```
 
 ## Options
@@ -53,89 +90,16 @@ tteg batch examples/landing-page-images.json
 |------|---------|-------------|
 | `-n`, `--count` | 5 | Number of results (1–10) |
 | `--orientation` | any | `landscape`, `portrait`, `square`, or `any` |
-| `--width` | — | Target width in pixels |
-| `--height` | — | Target height in pixels |
+| `--width` | — | Max width in pixels |
+| `--height` | — | Max height in pixels |
 
-## Save Locally
+## Starter kit
 
-```bash
-tteg save "saas team working" ./public/hero
-tteg save "workspace desk" ./public/images/hero.jpg --orientation landscape
-```
-
-`tteg save` searches, picks one result, downloads it locally, and prints JSON with the saved path.
-
-## Batch A Page
-
-```bash
-tteg batch examples/landing-page-images.json
-```
-
-Manifest format:
-
-```json
-{
-  "images": [
-    {
-      "query": "saas dashboard hero",
-      "output": "./public/images/hero",
-      "orientation": "landscape"
-    },
-    {
-      "query": "startup team meeting in office",
-      "output": "./public/images/team",
-      "orientation": "landscape"
-    }
-  ]
-}
-```
-
-Use this when the page needs a hero, team shot, founder photo, testimonial portrait, or menu shot in one pass.
-
-## Starter Kit Drop-In
-
-If you maintain a Claude Code, Codex, or Cursor starter kit, use the copy-paste blocks in [STARTER_KIT.md](STARTER_KIT.md).
-
-It includes:
-
-- a `CLAUDE.md` snippet for real-photo frontend work
-- an `AGENTS.md` snippet for Codex projects
-- an MCP config block for tool access inside agent hosts
-
-## Why
-
-Agents frequently need real images — hero banners, product shots, blog headers. The normal path (register for Unsplash, get an API key, handle rate limits) is too much friction for a mid-task agent call.
-
-`tteg` abstracts all of that. One install, one command, clean JSON out.
-
-## MCP server
-
-Use tteg directly from Claude Code, Cursor, or any MCP-compatible host from this repo:
-
-```json
-{
-  "mcpServers": {
-    "tteg": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/kiluazen/tteg", "tteg-mcp"]
-    }
-  }
-}
-```
-
-You can also install the package once and run `tteg-mcp` locally.
-
-Exposes:
-
-- `search_images(query, count, orientation, width, height)`
-- `save_image(url, output_path)`
-- `search_and_save_image(query, output_path, index, orientation, width, height)`
-- `batch_save_images(images)`
-
-No API key needed.
+Copy-paste blocks for CLAUDE.md and AGENTS.md: [STARTER_KIT.md](STARTER_KIT.md)
 
 ## Links
 
 - [tteg.kushalsm.com](https://tteg.kushalsm.com) — landing page
+- [Try it live](https://tteg.kushalsm.com/try) — search from your browser
 - [PyPI](https://pypi.org/project/tteg/) — `pip install tteg`
-- Free: 50 queries/day. No account needed.
+- Free tier: 50 queries/day per IP
