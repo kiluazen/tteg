@@ -14,6 +14,8 @@ No Unsplash app. No API key. No `.env` files. Just photos.
 
 Unsplash has 4M+ free photos. To use them programmatically you need to register a developer account, create an application, and manage API keys. Their official JavaScript library was [archived in 2024](https://github.com/unsplash/unsplash-js).
 
+Meanwhile `source.unsplash.com/random` — the zero-setup alternative everyone used — was deprecated in mid-2024 and now 503s. An authenticated GitHub code-search returns ~16,500 live file hits across ~885 unique repositories still referencing it; see [RESEARCH.md](RESEARCH.md) for the full list, including several 1k+ star projects currently shipping broken `<img>` tags.
+
 tteg handles all of that server-side. You get a CLI, an HTTP API, an MCP server, and an embeddable widget — all with zero setup.
 
 ## Install
