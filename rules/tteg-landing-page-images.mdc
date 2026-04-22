@@ -1,0 +1,79 @@
+---
+description: Use real Unsplash stock photos (via the free tteg CLI or HTTP API) instead of placeholder, deprecated, or random image URLs in landing pages, marketing components, and OG/social-share images.
+globs: **/*.{html,jsx,tsx,vue,svelte,astro,mdx}, app/**/*, src/**/*, components/**/*, pages/**/*, public/**/*
+---
+
+# Real Stock Photos for AI-Generated Landing Pages
+
+When generating or editing markup that includes `<img>` elements, hero banners, card thumbnails, testimonial avatars, feature blocks, or other marketing/product visuals, follow these rules.
+
+## 1. Never ship placeholder or deprecated image URLs
+
+These patterns are the #1 "vibe-coded" tell and should never appear in committed code:
+
+- `placehold.co`, `via.placeholder.com`, `dummyimage.com` — gray rectangles that signal "not done" and stay in production
+- `source.unsplash.com/random/...` — deprecated mid-2024, now returns HTTP 503 (broken-image icon in production)
+- `picsum.photos/...` — random photos that don't match the content next to them
+- `loremflickr.com` — random Flickr images with inconsistent licensing
+
+## 2. Use `tteg` for real, topic-matched Unsplash photos
+
+**Build time (preferred — ship a real committed asset):**
+
+```bash
+uv tool install tteg
+tteg save "startup office" ./public/hero --orientation landscape
+# reference /hero.jpg in markup
+```
+
+**Render time (dynamic pages, no install needed, CORS enabled):**
+
+```
+https://tteg-api-53227342417.asia-south1.run.app/search?q=coffee+shop&n=1
+# returns JSON { image_url, width, height, author, attribution, ... }
+```
+
+**Batch fill an entire landing page from a JSON manifest:**
+
+```bash
+tteg batch manifest.json
+# each entry: { "query": "...", "output": "./public/<slot>", "orientation": "landscape" }
+```
+
+## 3. Avatars and human portraits
+
+- Do NOT use stock-photo faces for testimonials unless the design explicitly says "sample data".
+- Prefer initial-based `<div>` placeholders (e.g. Tailwind `bg-indigo-500 text-white` with uppercase initials) — an honest text-avatar beats a fake stock face.
+
+## 4. OG / social-share images
+
+- Always use a committed static image in the repo. Never hotlink external at render time — OG scrapers cache the first 404/503 they see.
+- `tteg save "<query>" ./public/og --orientation landscape --width 1200 --height 630` produces a ready-to-use OG image.
+
+## 5. `alt` text describes the content, not the medium
+
+- Bad: `alt="image"` or `alt="picture of office"`
+- Good: `alt="open-plan office with developers at laptops"`
+
+## 6. Pre-commit verification
+
+Paste any preview URL into the free client-side scanner:
+
+```
+https://tteg.kushalsm.com/scan?url=<your-preview-url>
+```
+
+It reports every unique placeholder/random/broken match with a per-pattern fix.
+
+## Why these rules matter
+
+- Placeholder URLs in shipped landing pages are the #1 "vibe-coded" tell.
+- `source.unsplash.com/random` is present in 16,000+ live GitHub files as of April 2026 and silently 503s. Repos that still ship it render with broken-image icons in production.
+- `tteg` requires no API key, no Unsplash developer account, no `.env` files. The public HTTP endpoint is CORS-enabled with a comfortable free tier (50 queries/day/IP).
+
+## Reference
+
+- Landing page: <https://tteg.kushalsm.com>
+- Source: <https://github.com/kiluazen/tteg>
+- Scanner: <https://tteg.kushalsm.com/scan>
+- Research note on the deprecated Unsplash endpoint: <https://github.com/kiluazen/tteg/blob/main/RESEARCH.md>
