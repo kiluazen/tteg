@@ -10,6 +10,7 @@ import requests
 
 from models import ImageResult
 from sources.unsplash import search_unsplash
+from sources.pexels import search_pexels
 import db
 
 app = FastAPI(title="tteg-api", version="0.4.0")
@@ -77,6 +78,10 @@ def _pick_access_key(keys: list[str]) -> str:
     if not keys:
         return ""
     return random.choice(keys)
+
+
+def _get_pexels_key() -> str:
+    return os.environ.get("PEXELS_API_KEY", "").strip()
 
 
 def _serialize_result(result: ImageResult, index: int) -> dict[str, object]:
@@ -178,28 +183,63 @@ def search(
                 ),
             )
 
-    # ── Unsplash search ─────────────────────────────────────────────────────
+    # ── image search (Unsplash primary, Pexels fallback) ─────────────────
     access_key = _pick_access_key(_resolve_access_keys())
-    if not access_key:
-        raise HTTPException(status_code=500, detail="UNSPLASH_ACCESS_KEY is not configured")
+    pexels_key = _get_pexels_key()
 
-    try:
-        results = search_unsplash(
-            access_key=access_key,
-            query=q,
-            count=n,
-            orientation=orientation,
-            width=width,
-            height=height,
-        )
-    except requests.HTTPError as exc:
-        status_code = exc.response.status_code if exc.response is not None else 502
-        detail = exc.response.text if exc.response is not None and exc.response.text else str(exc)
-        raise HTTPException(status_code=status_code, detail=detail) from exc
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not access_key and not pexels_key:
+        raise HTTPException(status_code=500, detail="No image source API keys configured")
+
+    results: list[ImageResult] = []
+    used_source = "unsplash"
+
+    if access_key:
+        try:
+            results = search_unsplash(
+                access_key=access_key,
+                query=q,
+                count=n,
+                orientation=orientation,
+                width=width,
+                height=height,
+            )
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else 502
+            if status_code == 403 and pexels_key:
+                pass  # fall through to Pexels
+            else:
+                detail = exc.response.text if exc.response is not None and exc.response.text else str(exc)
+                raise HTTPException(status_code=status_code, detail=detail) from exc
+        except requests.RequestException as exc:
+            if pexels_key:
+                pass  # fall through to Pexels
+            else:
+                raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not results and pexels_key:
+        used_source = "pexels"
+        try:
+            results = search_pexels(
+                api_key=pexels_key,
+                query=q,
+                count=n,
+                orientation=orientation,
+                width=width,
+                height=height,
+            )
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else 502
+            detail = exc.response.text if exc.response is not None and exc.response.text else str(exc)
+            raise HTTPException(status_code=status_code, detail=detail) from exc
+        except requests.RequestException as exc:
+            raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not results and not access_key and not pexels_key:
+        raise HTTPException(status_code=500, detail="No image source API keys configured")
 
     payload: dict[str, object] = {
         "query": q,
@@ -209,7 +249,8 @@ def search(
         payload["_tier"] = "free"
         payload["_signup"] = "Run 'tteg auth login' for unlimited access"
 
-    _track_downloads(results, access_key)
+    if used_source == "unsplash":
+        _track_downloads(results, access_key)
     return payload
 
 
