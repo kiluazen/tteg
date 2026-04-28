@@ -1,5 +1,10 @@
 # tteg
 
+[![PyPI version](https://img.shields.io/pypi/v/tteg)](https://pypi.org/project/tteg/)
+[![Python 3.10+](https://img.shields.io/pypi/pyversions/tteg)](https://pypi.org/project/tteg/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/kiluazen/tteg/blob/main/LICENSE)
+[![CI](https://github.com/kiluazen/tteg/actions/workflows/ci.yml/badge.svg)](https://github.com/kiluazen/tteg/actions/workflows/ci.yml)
+
 Unsplash stock photos without registration or API keys.
 
 ```bash
