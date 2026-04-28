@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import random
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -39,8 +40,43 @@ def _load_local_env() -> None:
             os.environ[key] = value
 
 
-def _resolve_access_key() -> str:
-    return os.environ.get("UNSPLASH_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or ""
+def _resolve_access_keys() -> list[str]:
+    """Return all configured Unsplash access keys.
+
+    Reads from (in order):
+      UNSPLASH_ACCESS_KEYS — comma-separated list of keys
+      UNSPLASH_ACCESS_KEY  — primary key (backward compat)
+      UNSPLASH_ACCESS_KEY_2, _3, ... — additional numbered keys
+      ACCESS_KEY           — legacy fallback
+    """
+    keys: list[str] = []
+
+    pool = os.environ.get("UNSPLASH_ACCESS_KEYS", "")
+    if pool:
+        keys.extend(k.strip() for k in pool.split(",") if k.strip())
+
+    for name in ("UNSPLASH_ACCESS_KEY", "ACCESS_KEY"):
+        k = os.environ.get(name, "").strip()
+        if k and k not in keys:
+            keys.append(k)
+
+    i = 2
+    while True:
+        k = os.environ.get(f"UNSPLASH_ACCESS_KEY_{i}", "").strip()
+        if not k:
+            break
+        if k not in keys:
+            keys.append(k)
+        i += 1
+
+    return keys
+
+
+def _pick_access_key(keys: list[str]) -> str:
+    """Pick a random key from the pool for even distribution across Cloud Run instances."""
+    if not keys:
+        return ""
+    return random.choice(keys)
 
 
 def _serialize_result(result: ImageResult, index: int) -> dict[str, object]:
@@ -143,7 +179,7 @@ def search(
             )
 
     # ── Unsplash search ─────────────────────────────────────────────────────
-    access_key = _resolve_access_key()
+    access_key = _pick_access_key(_resolve_access_keys())
     if not access_key:
         raise HTTPException(status_code=500, detail="UNSPLASH_ACCESS_KEY is not configured")
 
