@@ -45,7 +45,7 @@ Use this when the project needs a hero image, team shot, founder photo, and test
   "mcpServers": {
     "tteg": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/kiluazen/tteg", "tteg-mcp"]
+      "args": ["tteg-mcp"]
     }
   }
 }

@@ -23,7 +23,7 @@ def search_images(
     width: int | None = None,
     height: int | None = None,
 ) -> dict[str, Any]:
-    """Return real stock photo URLs from tteg."""
+    """Search Unsplash for real stock photos and return image URLs. Use this when a frontend task needs a hero image, team photo, or any real-world photo instead of placeholders."""
     try:
         return run_search_images(
             query,
@@ -41,7 +41,7 @@ def save_image(
     url: str,
     output_path: str,
 ) -> dict[str, Any]:
-    """Download an image URL to a local path."""
+    """Download an image from a URL and save it to a local file path. Use after search_images to save a specific result into the project."""
     try:
         return download_image(url, output_path)
     except (TtegConnectionError, TtegAPIError, ValueError) as exc:
@@ -57,7 +57,7 @@ def search_and_save_image(
     width: int | None = None,
     height: int | None = None,
 ) -> dict[str, Any]:
-    """Search tteg and save one result locally."""
+    """Search for a stock photo and save it directly to a local file. Combines search + download in one step — ideal for adding a hero image or section photo to a project."""
     try:
         return run_search_and_save_image(
             query,
@@ -75,7 +75,7 @@ def search_and_save_image(
 def batch_save_images(
     images: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Search tteg and save many results locally from one JSON array."""
+    """Search and save multiple stock photos in one call. Pass an array of {query, output_path, orientation?} objects to fill an entire landing page with real photos at once."""
     try:
         saved: list[dict[str, Any]] = []
         for index, item in enumerate(images, start=1):
